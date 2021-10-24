@@ -1,3 +1,7 @@
+'''
+codes for spherical Jeans equation
+'''
+
 from astropy import constants as const
 import numpy as np 
 from iminuit import Minuit
