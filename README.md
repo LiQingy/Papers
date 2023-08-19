@@ -1,23 +1,27 @@
 # Papers
 Codes for works
 
-**CLAUDS and HSC:**  
+**Li+2022b:**  
 Title: "Candidates of groups/protoclusters from CLAUDS and HSC deep data"   
-https://iopscience.iop.org/article/10.3847/1538-4357/ac6e69
+arXiv: 2205.05517  
+Publication: https://iopscience.iop.org/article/10.3847/1538-4357/ac6e69
 
-**oPDF-II:**  
+**Li+2022a:**  
 Title: "What to expect from dynamical modelling of cluster haloes II. 
 Investigating dynamical state indicators with Random Forest"  
-https://academic.oup.com/mnras/article/514/4/5890/6617653
+arXiv: 2203.15268    
+Publication: https://academic.oup.com/mnras/article/514/4/5890/6617653
 
-**oPDF-I:**  
+**Li+2021:**  
 Title: "What to expect from dynamical modelling of cluster haloes I. The
 information content of different dynamical tracers"  
-https://doi.org/10.1093/mnras/stab1633
+arXiv: 2106.03011  
+Publication: https://doi.org/10.1093/mnras/stab1633
 
-**The300:**  
+**Li+2020:**  
 Title: "The Three Hundred project: the stellar and gas profiles"  
-https://academic.oup.com/mnras/article/495/3/2930/5841289
+arXiv: 2005.06135  
+Publication: https://academic.oup.com/mnras/article/495/3/2930/5841289
 
 
 
