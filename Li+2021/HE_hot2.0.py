@@ -8,23 +8,31 @@ from oPDF.oPDF import *
 import h5py
 import random  
 
-def Mcal(rvir,nbin,xx,vv):
-    # rbin = np.linspace(np.log10(rvir)/nbin, np.log10(rvir), nbin+1)[:-1] #the bin number is n
+def Mcal(rvir,nbin,xx,vv,temp,mass):
+
+	kb = const.k_B.to('eV / K').value #eV/K
+	mu = 0.6125
+	mp = const.m_p.to('eV s2 / kpc2').value #eV * s^2 / kpc^2
+	G = const.G.to('kpc3 / (Msun s2)').value  #kpc^3/Msun/s^2
+
 	rbin = np.linspace(np.log10(200),np.log10(rvir),nbin+1)
 	rr = np.log10(np.sqrt(np.sum(xx**2,axis = 1)))
 
 	betav = np.zeros(nbin)
-	vsigma2 = np.zeros(nbin)
-	sigma_r2 = np.zeros(nbin)
-	numden = np.zeros(nbin)
+	sigma_vr2 = np.zeros(nbin)
+	Temppro = np.zeros(nbin)
+	Rhopro = np.zeros(nbin) 
 
 	for kk in range(nbin):
 		rbin0 = rbin[kk+1]
 		rbin1 = rbin[kk]
 		loc = np.where((rr > rbin1) & (rr < rbin0))[0]
 
-		vtrue = loc.shape[0] / (4 / 3 * np.pi * ((10**rbin0)**3 - (10**rbin1)**3)) #number density
-
+		#------------------------------------------------------------------
+		Temppro[kk] = np.mean(temp[loc]) # temperature at Rvir
+		Rhopro[kk] = np.sum(mass[loc]) * 1e10 / (4 / 3 * np.pi *((10**rbin0)**3 - (10**rbin1)**3))
+		
+				
 		rabs = np.sqrt(np.sum(xx[loc]**2, axis = 1))
 		v_r = np.sum(xx[loc] * vv[loc], axis = 1) / rabs
 		v_phi = (xx[loc,0] * vv[loc,1] - xx[loc,1] * vv[loc,0]) / np.sqrt(xx[loc,0]**2 + xx[loc,1]**2) 
@@ -34,31 +42,34 @@ def Mcal(rvir,nbin,xx,vv):
 		sigma_vr = np.std(v_r)
 		sigma_vphi = np.std(v_phi)
 		sigma_vtheta = np.std(v_theta)
-
 		betav[kk] = 1 - (sigma_vphi**2 + sigma_vtheta**2) / 2 / sigma_vr**2
-		vsigma2[kk] = vtrue * sigma_vr**2
-		sigma_r2[kk] = sigma_vr**2
-		numden[kk] = vtrue
+		sigma_vr2[kk] = sigma_vr**2
 
 	nr = np.log10(rvir-200) / nbin
 	rlin = 10**(rbin[:-1] + nr / 2)
-	G = const.G.to('kpc3 / (Msun s2)').value  #kpc^3/Msun/s^2
-	unit = const.kpc.value / 1e3
+
+	slope_rho = np.gradient(np.log(Rhopro[:]),rbin[:-1],edge_order=2) / np.log(10) 
+	slope_temp = np.gradient(np.log(Temppro[:]),rbin[:-1],edge_order=2) / np.log(10)
+	slope_sigmavr2 = np.gradient(np.log(sigma_vr2[:]),rbin[:-1],edge_order=2) / np.log(10) 
+
+	#-----------------------
+	a0 = - kb * Temppro[:] * rlin[:] / (G * mu * mp)  # Msun / h
+	a1 = - rlin[:] * sigma_vr2[:] / const.G.to('km3 / (Msun s2)').value * const.kpc.value /1e3 
 
 	Mpro = np.zeros(nbin)
-	slopev = np.gradient(vsigma2[:],np.log10(rlin[:]),edge_order=1)
-	slopev = slopev / rlin[:] / np.log(10)
-	Mpro[:] = - rlin[:]**2 / G * (1/numden[:]*slopev[:] + 2 * betav[:] * sigma_r2[:] / rlin[:]) / unit**2
-	#Mpro[:7] = 0
+	Mpro[:] = a0 * (slope_rho + slope_temp) + a1 * (slope_rho + slope_sigmavr2 + 2 * betav[:]) 
+	# Mpro[:7] = 0
 	return Mpro
 
-def bootstrap(nbin,Nboot,npp,rvir,xx,vv):
+def bootstrap(nbin,Nboot,npp,rvir,xx,vv,temp,mass):
 	bootdata = np.zeros(shape = (Nboot,nbin))
 	for k in range(Nboot):
 		Npploc = np.array(random.choices(range(0,npp),k=npp))
 		xx0 = xx[Npploc]
 		vv0 = vv[Npploc]
-		bootdata[k] = Mcal(rvir,nbin,xx0,vv0)
+		temp0 = temp[Npploc]
+		mass0 = mass[Npploc]
+		bootdata[k] = Mcal(rvir,nbin,xx0,vv0,temp0,mass0)
 	return bootdata
 
 
@@ -109,10 +120,10 @@ def cal_matrix(maindata,bootdata,rvir,nbin,Mtrue,ctrue,nclu):
 	fit_M = 10**fitmc.values['M']
 	fit_C = 10**fitmc.values['c']
 
-	Mmin = fitmc.values['M'] - 0.02
-	Mmax = fitmc.values['M'] + 0.02
-	Cmin = fitmc.values['c'] - 0.02
-	Cmax = fitmc.values['c'] + 0.02
+	Mmin = fitmc.values['M'] - 0.04
+	Mmax = fitmc.values['M'] + 0.04
+	Cmin = fitmc.values['c'] - 0.04
+	Cmax = fitmc.values['c'] + 0.04
 
 	fx,fy,fval0 = fitmc.contour('M','c',size = 100,bound = [[Mmin,Mmax],[Cmin,Cmax]])
 
@@ -122,6 +133,8 @@ def subsample(nbin,data,rvir,npp,Nboot,Mtrue,ctrue,nclu):
 
 	xx = np.array(data['x'][:])
 	vv = np.array(data['v'][:])
+	temp = np.array(data['Temp'][:])
+	mass = np.array(data['Mass'][:])
 	data.close()
 
 	rr = np.sqrt(np.sum(xx**2, axis = 1))
@@ -132,12 +145,14 @@ def subsample(nbin,data,rvir,npp,Nboot,Mtrue,ctrue,nclu):
 	Npploc = np.array(random.sample(list(loc200),npp))
 	xx0 = xx[Npploc]
 	vv0 = vv[Npploc]
+	temp0 = temp[Npploc]
+	mass0 = mass[Npploc]
 
-	maindata = Mcal(rvir,nbin,xx0,vv0)
+	maindata = Mcal(rvir,nbin,xx0,vv0,temp0,mass0)
 	fit_M = 0
 
 	while fit_M == 0:
-		bootdata = bootstrap(nbin,Nboot,npp,rvir,xx0,vv0)
+		bootdata = bootstrap(nbin,Nboot,npp,rvir,xx0,vv0,temp0,mass0)
 		fit_M,fit_C,fval0 = cal_matrix(maindata,bootdata,rvir,nbin,Mtrue,ctrue,nclu)
 
 	return fit_M,fit_C,fval0,maindata,bootdata
@@ -158,26 +173,22 @@ def main(nbin,Nboot,npp):
 		Mtrue = np.log10(dataCM[i,2])
 		ctrue = np.log10(dataCM[i,6])
 
-		dataf = '/home/qyli/oPDFnew/data/inidata/GXsub_DM/GXsub_DM_vx%s.h5' %(i+1)
+		dataf = '/home/qyli/oPDFnew/data/inidata/GXsub_hotgas/GXsub_hotgas_vx%s.h5' %(i+1)
 		data = h5py.File(dataf,'r')
 
 		mcfit[i,0], mcfit[i,1], fval0, mainall[i], bootdata = subsample(nbin, data, rvir, npp, Nboot, Mtrue,ctrue ,i ) 
 		fchi2 += fval0.T - np.min(fval0)
 
-		np.savetxt('/home/qyli/oPDFnew/data/JeansE/bootstrap_DM_n%s_bin%s_boot%s/GXsub_DM_JEboot%s.txt' %(npp,nbin,Nboot,i+1), bootdata)
+		np.savetxt('/home/qyli/oPDFnew/data/HE/bootstrap_hotgas_n%s_bin%s_boot%s/GXsub_hotgas_HEboot%s.txt' %(npp,nbin,Nboot,i+1), bootdata)
 
 		print(i)
 	fchi2 = fchi2 / 324
 
-	np.savetxt('/home/qyli/oPDFnew/data/JeansE/JeansE_GXsub_DM_Mpro_n%s_bin%s_boot%s.txt' %(npp,nbin,Nboot),mainall)
-	np.savetxt('/home/qyli/oPDFnew/data/JeansE/JeansE_Chi2_rcin200_TMP_n%s_bin%s_boot%s.txt' %(npp,nbin,Nboot), fchi2)
-	np.savetxt('/home/qyli/oPDFnew/data/JeansE/JeansE_Chi2fit_MCDM_rcin200_TMP_n%s_bin%s_boot%s.txt' %(npp,nbin,Nboot), mcfit)
+	np.savetxt('/home/qyli/oPDFnew/data/HE/HE_GXsub_hotgas_Mpro_n%s_bin%s_boot%s.txt' %(npp,nbin,Nboot),mainall)
+	np.savetxt('/home/qyli/oPDFnew/data/HE/HE_Chi2_rcin200_TMP_n%s_bin%s_boot%s.txt' %(npp,nbin,Nboot), fchi2)
+	np.savetxt('/home/qyli/oPDFnew/data/HE/HE_Chi2fit_MChotgas_rcin200_TMP_n%s_bin%s_boot%s.txt' %(npp,nbin,Nboot), mcfit)
 main(nbin = 20, Nboot = 200,npp = 100000)
-
-
-
-
-
+	
 
 
 
